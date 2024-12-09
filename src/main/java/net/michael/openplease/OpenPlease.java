@@ -127,9 +127,9 @@ public class OpenPlease {
             double distance = playerPos.distSqr(new Vec3i(doorPos.getX(), doorPos.getY(), doorPos.getZ()));
 
             boolean isOpen = world.getBlockState(doorPos).getValue(DoorBlock.OPEN);
-            if (distance <= DOOR_DISTANCE * DOOR_DISTANCE && !isOpen) {
+            if (distance <= ((DOOR_DISTANCE + 1) * (DOOR_DISTANCE + 1)) && !isOpen) {
                 world.setBlock(doorPos, world.getBlockState(doorPos).setValue(DoorBlock.OPEN, true), 3);
-            } else if (distance > DOOR_DISTANCE * DOOR_DISTANCE && isOpen) {
+            } else if (distance > ((DOOR_DISTANCE + 1) * (DOOR_DISTANCE + 1)) && isOpen) {
                 world.setBlock(doorPos, world.getBlockState(doorPos).setValue(DoorBlock.OPEN, false), 3);
             }
         }
