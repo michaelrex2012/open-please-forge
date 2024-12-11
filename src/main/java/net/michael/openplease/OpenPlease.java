@@ -1,8 +1,11 @@
 package net.michael.openplease;
 
 import com.mojang.logging.LogUtils;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Vec3i;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -11,6 +14,7 @@ import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.TickEvent;
@@ -18,10 +22,10 @@ import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 
 // The value here should match an entry in the META-INF/mods.toml file
@@ -31,58 +35,71 @@ public class OpenPlease {
     public static final String MOD_ID = "openplease";
     // Directly reference a slf4j logger
     public static final Logger LOGGER = LogUtils.getLogger();
+    public static KeyMapping toggle;
 
-    public OpenPlease(FMLJavaModLoadingContext context) {
-        IEventBus modEventBus = context.getModEventBus();
+    private boolean previousKeyState = false; // Track key state for toggling
+    public static boolean doorToggle = true; // Toggle for auto-open feature
+    public static final float DOOR_DISTANCE = 4.0f; // Distance for door interaction
+
+    public OpenPlease() {
+        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         // Register the commonSetup method for modloading
         modEventBus.addListener(this::commonSetup);
 
+        // Register key mappings
+        modEventBus.addListener(this::registerKeyMappings);
+
         // Register ourselves for server and other game events we are interested in
         MinecraftForge.EVENT_BUS.register(this);
 
-        // Register the item to a creative tab
+        // Register the creative tab listener
         modEventBus.addListener(this::addCreative);
-
-        // Register our mod's ForgeConfigSpec so that Forge can create and load the config file for us
-        // context.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-
+        // Common setup logic (currently empty)
     }
 
-    // Add the example block item to the building blocks tab
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
-
+        // Add items or blocks to creative mode tabs (currently empty)
     }
 
-    // You can use SubscribeEvent and let the Event Bus discover methods to call
+    @SubscribeEvent
+    public void registerKeyMappings(RegisterKeyMappingsEvent event) {
+        toggle = new KeyMapping(
+                "key.openplease.toggle", // Translation key
+                GLFW.GLFW_KEY_R,         // Default key
+                "key.categories.openplease" // Category
+        );
+
+        event.register(toggle);
+    }
+
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-
-    }
-
-    // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
-    @Mod.EventBusSubscriber(modid = MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
-    public static class ClientModEvents {
-        @SubscribeEvent
-        public static void onClientSetup(FMLClientSetupEvent event) {
-
-        }
-    }
-
-
-    public static final float DOOR_DISTANCE = 1;
-
-    public OpenPlease() {
-        // Register event handlers
-        MinecraftForge.EVENT_BUS.register(this);
+        LOGGER.info("OpenPlease: Server is starting...");
     }
 
     @SubscribeEvent
     public void onServerTick(TickEvent.LevelTickEvent event) {
-        // Ensure we are on the server side and in the END phase of the tick
+        // Handle key toggling on the client
+        if (event.level.isClientSide) {
+            boolean currentKeyState = toggle.isDown();
+            if (currentKeyState && !previousKeyState) {
+                doorToggle = !doorToggle;
+
+                Minecraft.getInstance().gui.setOverlayMessage(
+                        Component.literal(doorToggle ? "Auto-Open Enabled!" : "Auto-Open Disabled!")
+                                .withStyle(doorToggle ? ChatFormatting.GREEN : ChatFormatting.RED),
+                        true
+                );
+            }
+            previousKeyState = currentKeyState;
+            return; // Skip further processing for the client
+        }
+
+        // Server-side logic for door handling
         if (event.level instanceof ServerLevel world && event.phase == TickEvent.Phase.END) {
             for (Player player : world.players()) {
                 BlockPos playerPos = player.blockPosition();
@@ -92,13 +109,13 @@ public class OpenPlease {
                     for (int y = -4; y <= 4; y++) {
                         for (int z = -4; z <= 4; z++) {
                             BlockPos pos = playerPos.offset(x, y, z);
-                            if (isDoor(world, pos)) {
+                            Block block = world.getBlockState(pos).getBlock();
+
+                            if (block instanceof DoorBlock) {
                                 handleDoor(world, pos, playerPos);
-                            }
-                            if (isTrapdoor(world, pos)) {
+                            } else if (block instanceof TrapDoorBlock) {
                                 handleTrapdoor(world, pos, playerPos);
-                            }
-                            if (isFenceGate(world, pos)) {
+                            } else if (block instanceof FenceGateBlock) {
                                 handleFenceGate(world, pos, playerPos);
                             }
                         }
@@ -108,51 +125,41 @@ public class OpenPlease {
         }
     }
 
-    private boolean isDoor(Level world, BlockPos pos) {
-        Block block = world.getBlockState(pos).getBlock();
-        return block instanceof DoorBlock;
-    }
-
-    private boolean isTrapdoor(Level world, BlockPos pos) {
-        Block block = world.getBlockState(pos).getBlock();
-        return block instanceof TrapDoorBlock;
-    }
-
-    private boolean isFenceGate(Level world, BlockPos pos) {
-        Block block = world.getBlockState(pos).getBlock();
-        return block instanceof FenceGateBlock;
-    }
-
     private void handleDoor(Level world, BlockPos doorPos, BlockPos playerPos) {
-        double distance = playerPos.distSqr(new Vec3i(doorPos.getX(), doorPos.getY(), doorPos.getZ()));
-
+        double distance = playerPos.distSqr(doorPos);
         boolean isOpen = world.getBlockState(doorPos).getValue(DoorBlock.OPEN);
-        if (distance <= ((DOOR_DISTANCE + 1) * (DOOR_DISTANCE + 1)) && !isOpen) {
-            world.setBlock(doorPos, world.getBlockState(doorPos).setValue(DoorBlock.OPEN, true), 3);
-        } else if (distance > ((DOOR_DISTANCE + 1) * (DOOR_DISTANCE + 1)) && isOpen) {
-            world.setBlock(doorPos, world.getBlockState(doorPos).setValue(DoorBlock.OPEN, false), 3);
+        boolean shouldBeOpen = distance <= DOOR_DISTANCE * DOOR_DISTANCE;
+
+        if (isOpen != shouldBeOpen) {
+            world.setBlock(doorPos, world.getBlockState(doorPos).setValue(DoorBlock.OPEN, shouldBeOpen), 3);
         }
     }
 
     private void handleTrapdoor(Level world, BlockPos trapdoorPos, BlockPos playerPos) {
-        double distance = playerPos.distSqr(new Vec3i(trapdoorPos.getX(), trapdoorPos.getY(), trapdoorPos.getZ()));
-
+        double distance = playerPos.distSqr(trapdoorPos);
         boolean isOpen = world.getBlockState(trapdoorPos).getValue(TrapDoorBlock.OPEN);
-        if (distance <= DOOR_DISTANCE * DOOR_DISTANCE && !isOpen) {
-            world.setBlock(trapdoorPos, world.getBlockState(trapdoorPos).setValue(TrapDoorBlock.OPEN, true), 3);
-        } else if (distance > DOOR_DISTANCE * DOOR_DISTANCE && isOpen) {
-            world.setBlock(trapdoorPos, world.getBlockState(trapdoorPos).setValue(TrapDoorBlock.OPEN, false), 3);
+        boolean shouldBeOpen = distance <= DOOR_DISTANCE * DOOR_DISTANCE;
+
+        if (isOpen != shouldBeOpen) {
+            world.setBlock(trapdoorPos, world.getBlockState(trapdoorPos).setValue(TrapDoorBlock.OPEN, shouldBeOpen), 3);
         }
     }
 
     private void handleFenceGate(Level world, BlockPos fenceGatePos, BlockPos playerPos) {
-        double distance = playerPos.distSqr(new Vec3i(fenceGatePos.getX(), fenceGatePos.getY(), fenceGatePos.getZ()));
-
+        double distance = playerPos.distSqr(fenceGatePos);
         boolean isOpen = world.getBlockState(fenceGatePos).getValue(FenceGateBlock.OPEN);
-        if (distance <= DOOR_DISTANCE * DOOR_DISTANCE && !isOpen) {
-            world.setBlock(fenceGatePos, world.getBlockState(fenceGatePos).setValue(FenceGateBlock.OPEN, true), 3);
-        } else if (distance > DOOR_DISTANCE * DOOR_DISTANCE && isOpen) {
-            world.setBlock(fenceGatePos, world.getBlockState(fenceGatePos).setValue(FenceGateBlock.OPEN, false), 3);
+        boolean shouldBeOpen = distance <= DOOR_DISTANCE * DOOR_DISTANCE;
+
+        if (isOpen != shouldBeOpen) {
+            world.setBlock(fenceGatePos, world.getBlockState(fenceGatePos).setValue(FenceGateBlock.OPEN, shouldBeOpen), 3);
+        }
+    }
+
+    @Mod.EventBusSubscriber(modid = MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+    public static class ClientModEvents {
+        @SubscribeEvent
+        public static void onClientSetup(FMLClientSetupEvent event) {
+            LOGGER.info("OpenPlease: Client setup complete.");
         }
     }
 }
