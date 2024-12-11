@@ -39,7 +39,7 @@ public class OpenPlease {
 
     private boolean previousKeyState = false; // Track key state for toggling
     public static boolean doorToggle = true; // Toggle for auto-open feature
-    public static final float DOOR_DISTANCE = 4.0f; // Distance for door interaction
+    public static final float DOOR_DISTANCE = 2f; // Distance for door interaction
 
     public OpenPlease() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
@@ -100,7 +100,7 @@ public class OpenPlease {
         }
 
         // Server-side logic for door handling
-        if (event.level instanceof ServerLevel world && event.phase == TickEvent.Phase.END) {
+        if (event.level instanceof ServerLevel world && event.phase == TickEvent.Phase.END && doorToggle) {
             for (Player player : world.players()) {
                 BlockPos playerPos = player.blockPosition();
 
