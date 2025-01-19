@@ -33,10 +33,14 @@ public class OpenPlease {
     public static final String MOD_ID = "openplease";
     // Directly reference a slf4j logger
     public static final Logger LOGGER = LogUtils.getLogger();
-    public static KeyMapping toggle;
-
-    private boolean previousKeyState = false; // Track key state for toggling
+    public static KeyMapping toggleOpen; // Keybinding for toggling auto-open
+    public static KeyMapping toggleSound; // Keybinding for toggling sound
+    private static KeyMapping getState; // Keybinding for getting states
+    private boolean previousKeyStateOpen = false; // Track key state for toggling
+    private boolean previousKeyStateSound = false; // Track key state for sound
+    private boolean previousKeyGetSate = false; // Track key state for getting states
     public static boolean doorToggle = true; // Toggle for auto-open feature
+    public static boolean soundToggle = true; // Toggle for sound feature
     public static final float DOOR_DISTANCE = 2f; // Distance for door interaction
 
     public OpenPlease() {
@@ -65,13 +69,25 @@ public class OpenPlease {
 
     @SubscribeEvent
     public void registerKeyMappings(RegisterKeyMappingsEvent event) {
-        toggle = new KeyMapping(
+        toggleOpen = new KeyMapping(
                 "key.openplease.toggle", // Translation key
                 GLFW.GLFW_KEY_R,         // Default key
                 "key.categories.openplease" // Category
         );
+        toggleSound = new KeyMapping(
+                "key.openplease.sound", // Translation key
+                GLFW.GLFW_KEY_Y,         // Default key
+                "key.categories.openplease" // Category
+        );
+        getState = new KeyMapping(
+                "key.openplease.getstate", // Translation key
+                GLFW.GLFW_KEY_U,         // Default key
+                "key.categories.openplease" // Category
+        );
 
-        event.register(toggle);
+        event.register(toggleOpen);
+        event.register(toggleSound);
+        event.register(getState);
     }
 
     @SubscribeEvent
@@ -83,8 +99,10 @@ public class OpenPlease {
     public void onServerTick(TickEvent.LevelTickEvent event) {
         // Handle key toggling on the client
         if (event.level.isClientSide) {
-            boolean currentKeyState = toggle.isDown();
-            if (currentKeyState && !previousKeyState) {
+            boolean currentKeyStateOpen = toggleOpen.isDown();
+            boolean currentKeyStateSound = toggleSound.isDown();
+            boolean currentKeyGetState = getState.isDown();
+            if (currentKeyStateOpen && !previousKeyStateOpen) {
                 doorToggle = !doorToggle;
 
                 Minecraft.getInstance().gui.setOverlayMessage(
@@ -93,8 +111,30 @@ public class OpenPlease {
                         true
                 );
             }
-            previousKeyState = currentKeyState;
-            return; // Skip further processing for the client
+            if (currentKeyStateSound && !previousKeyStateSound) {
+                soundToggle = !soundToggle;
+
+                Minecraft.getInstance().gui.setOverlayMessage(
+                        Component.literal(soundToggle ? "Sound Enabled!" : "Sound Disabled!")
+                                .withStyle(soundToggle ? ChatFormatting.GREEN : ChatFormatting.RED),
+                        true
+                );
+            }
+            if (currentKeyGetState && !previousKeyGetSate) {
+                Minecraft.getInstance().gui.setOverlayMessage(
+                        Component.literal("Auto-Open: ").withStyle(ChatFormatting.WHITE)
+                                .append(Component.literal(doorToggle ? "Enabled" : "Disabled")
+                                        .withStyle(doorToggle ? ChatFormatting.GREEN : ChatFormatting.RED))
+                                .append(Component.literal(", Sound: ").withStyle(ChatFormatting.WHITE))
+                                .append(Component.literal(soundToggle ? "Enabled" : "Disabled")
+                                        .withStyle(soundToggle ? ChatFormatting.GREEN : ChatFormatting.RED)),
+                        true
+                );
+            }
+
+            previousKeyStateOpen = currentKeyStateOpen;
+            previousKeyStateSound = currentKeyStateSound;
+            previousKeyGetSate = currentKeyGetState;
         }
 
         // Server-side logic for door handling
@@ -112,30 +152,30 @@ public class OpenPlease {
                             if (block instanceof DoorBlock && block != Blocks.IRON_DOOR) {
                                 boolean oldStateDoor = world.getBlockState(pos).getValue(DoorBlock.OPEN);
                                 handleDoor(world, pos, playerPos);
-                                if (oldStateDoor && !world.getBlockState(pos).getValue(DoorBlock.OPEN)) {
+                                if (oldStateDoor && !world.getBlockState(pos).getValue(DoorBlock.OPEN) && soundToggle) {
                                     world.playSound(null, pos, SoundEvents.WOODEN_DOOR_CLOSE, SoundSource.BLOCKS, 1.0f, 1.0f);
                                 }
-                                if (!oldStateDoor && world.getBlockState(pos).getValue(DoorBlock.OPEN)) {
+                                if (!oldStateDoor && world.getBlockState(pos).getValue(DoorBlock.OPEN) && soundToggle) {
                                     world.playSound(null, pos, SoundEvents.WOODEN_DOOR_OPEN, SoundSource.BLOCKS, 1.0f, 1.0f);
                                 }
                             }
                             if (block instanceof TrapDoorBlock && block != Blocks.IRON_TRAPDOOR) {
                                 boolean oldStateTrapDoor = world.getBlockState(pos).getValue(TrapDoorBlock.OPEN);
                                 handleTrapdoor(world, pos, playerPos);
-                                if (oldStateTrapDoor && !world.getBlockState(pos).getValue(TrapDoorBlock.OPEN)) {
+                                if (oldStateTrapDoor && !world.getBlockState(pos).getValue(TrapDoorBlock.OPEN) && soundToggle) {
                                     world.playSound(null, pos, SoundEvents.WOODEN_TRAPDOOR_CLOSE, SoundSource.BLOCKS, 1.0f, 1.0f);
                                 }
-                                if (!oldStateTrapDoor && world.getBlockState(pos).getValue(TrapDoorBlock.OPEN)) {
+                                if (!oldStateTrapDoor && world.getBlockState(pos).getValue(TrapDoorBlock.OPEN) && soundToggle) {
                                     world.playSound(null, pos, SoundEvents.WOODEN_TRAPDOOR_OPEN, SoundSource.BLOCKS, 1.0f, 1.0f);
                                 }
                             }
                             if (block instanceof FenceGateBlock) {
                                 boolean oldStateFenceGate = world.getBlockState(pos).getValue(FenceGateBlock.OPEN);
                                 handleFenceGate(world, pos, playerPos);
-                                if (oldStateFenceGate && !world.getBlockState(pos).getValue(FenceGateBlock.OPEN)) {
+                                if (oldStateFenceGate && !world.getBlockState(pos).getValue(FenceGateBlock.OPEN) && soundToggle) {
                                     world.playSound(null, pos, SoundEvents.FENCE_GATE_CLOSE, SoundSource.BLOCKS, 1.0f, 1.0f);
                                 }
-                                if (!oldStateFenceGate && world.getBlockState(pos).getValue(FenceGateBlock.OPEN)) {
+                                if (!oldStateFenceGate && world.getBlockState(pos).getValue(FenceGateBlock.OPEN) && soundToggle) {
                                     world.playSound(null, pos, SoundEvents.FENCE_GATE_OPEN, SoundSource.BLOCKS, 1.0f, 1.0f);
                                 }
                             }

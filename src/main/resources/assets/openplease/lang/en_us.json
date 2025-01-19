@@ -1,4 +1,6 @@
 {
   "key.openplease.toggle": "Auto-Open Toggle",
+  "key.openplease.sound": "Sound Toggle",
+  "key.openplease.getstate": "Get State",
   "key.categories.openplease": "Open Please!"
 }
